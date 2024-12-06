@@ -1,0 +1,50 @@
+﻿@using System.Linq.Expressions
+@using Microsoft.AspNetCore.Components;
+@using Microsoft.AspNetCore.Components.Forms;
+@using System;
+@using System.Globalization;
+@inherits InputBase<double>
+
+
+@if (!string.IsNullOrWhiteSpace(Label))
+{
+    <label class="form-control-label" for="@Id">@Label</label>
+}
+<!--<input class="form-control @CssClass" id="@Id" @bind="@CurrentValueAsString" />-->
+<input style="@Style" class="@CssClass" id="@Id" value="@BindConverter.FormatValue(CurrentValueAsString)" width="50"
+       @onchange="EventCallback.Factory.CreateBinder<string>(this, __value => CurrentValueAsString = __value, CurrentValueAsString)" />
+<div class="form-control-validation">
+    <ValidationMessage For="@ValidationFor" />
+</div>
+
+
+@code {
+    [Parameter] public string Id { get; set; }
+    [Parameter] public string Label { get; set; }
+    [Parameter] public string Style { get; set; }
+    [Parameter] public Expression<Func<double>> ValidationFor { get; set; }
+
+    protected override bool TryParseValueFromString(string value, out double result, out string validationErrorMessage)
+    {
+        var style = NumberStyles.Number;
+        var ok = double.TryParse(value, style, new NumberFormatInfo { NumberDecimalSeparator = "." }, out result);
+        if (ok)
+        {
+            validationErrorMessage = null;
+            return true;
+        }
+        else
+        {
+            result = 0.0;
+            validationErrorMessage = "Invalid number";
+            return false;
+        }
+    }
+
+    protected override string FormatValueAsString(double value)
+    {
+        Console.WriteLine($"InputDouble FormatValueAsString(), value={value}");
+        return value.ToString(new NumberFormatInfo { NumberDecimalSeparator = "." });
+    }
+}
+

@@ -1,0 +1,31 @@
+﻿@using Common.Dtos;
+@using ClientModels;
+@inject IJSRuntime JSRuntime
+
+
+<div>
+    <canvas id="@Id" style="border: 1px solid #d3d3d3;">Browser does not support HTML5 canvas</canvas>
+</div>
+
+@code {
+
+    [Parameter]
+    public List<DataPoint> DataPoints { get; set; }
+
+    [Parameter]
+    public string Id { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        int[] values = { 1, 2, 5, 8, 3 };
+        Console.WriteLine($"PieChart kutsuu Pie() id:lla {Id}");
+        JSRuntime.InvokeVoidAsync("pie", Id, DataPoints);
+    }
+
+}
+

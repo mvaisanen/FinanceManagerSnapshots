@@ -1,0 +1,66 @@
+﻿@using System.Linq.Expressions
+@using Microsoft.AspNetCore.Components;
+@using Microsoft.AspNetCore.Components.Forms;
+@using System;
+@using System.Globalization;
+
+
+
+<input type="text" class="@(isError ? "invalid" : "")" @bind-value="@strvalue"/>
+
+
+@code {
+    [Parameter]
+    public int Value { get; set; }
+    [Parameter]
+    public EventCallback<int> ValueChanged { get; set; }
+
+    private bool isError = false;
+
+    private string _strValue { get; set; }
+
+    private string strvalue
+    {
+        get => _strValue;
+        set
+        {
+            Console.WriteLine($"Setting value for strvalue, value={value}");
+            if (_strValue == value)
+            {
+                Console.WriteLine("Value is same as existing, skipping set");
+                return;
+            }
+            _strValue = value;
+            var style = NumberStyles.Number;
+            var ok = int.TryParse(value, style, System.Globalization.CultureInfo.InvariantCulture,  out var result);
+            if (ok)
+            {
+                isError = false;
+                Value = result;
+                ValueChanged.InvokeAsync(result);
+            }
+            else
+            {
+                isError = true;
+            }
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine($"InputNumberBox OnInitialized(). Value={Value}");
+        base.OnInitialized();
+
+        var valueStr = Value.ToString();
+        if (valueStr != _strValue)
+            strvalue = valueStr;
+    }
+
+
+    protected override void OnParametersSet()
+    {
+        Console.WriteLine($"InputNumberBox OnParametersSet(). Value={Value}, ValueChanged={ValueChanged}");
+        base.OnParametersSet();
+    }
+}
+

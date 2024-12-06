@@ -1,0 +1,75 @@
+﻿@using Common.Dtos;
+
+
+<div>
+    <table>
+        @if (SelectedItem == null)
+        {
+            <tr><td><input type="text" list="data" value="@searchString" @oninput="@OnInput" /></td></tr>
+            <tr>
+                <td>
+                    @if (DisplayList.Count > 0)
+                    {
+                        <ul class="autosuggest-list">
+                            @foreach (var stock in DisplayList)
+                            {
+                                <li key="@("li" + stock.Id)" @onclick="@(() => OnItemClicked(stock))">@stock.Name</li>
+                            }
+                        </ul>
+                    }
+                </td>
+            </tr>
+        }
+        else
+        {
+            <tr>
+                <td>
+                    <input type="text" list="data" value="@(SelectedItem.Name+" ("+SelectedItem.Ticker+")")" disabled />
+                    <label style="width:20px; color:red" @onclick="@OnClearSelectedClicked">X</label>
+                </td>
+            </tr>
+        }
+    </table>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback<string> OnInputChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<StockDTO> OnItemSelected { get; set; }
+
+    [Parameter]
+    public EventCallback OnClearSelected { get; set; }
+
+    [Parameter]
+    public StockDTO SelectedItem { get; set; }
+
+    [Parameter]
+    public List<StockDTO> DisplayList { get; set; } //todo: generic object list!
+
+    private string searchString { get; set; }
+
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        searchString = e.Value.ToString();
+        OnInputChanged.InvokeAsync(searchString);
+    }
+
+    private void OnItemClicked(StockDTO stock)
+    {
+        OnItemSelected.InvokeAsync(stock);
+    }
+
+    private void OnClearSelectedClicked()
+    {
+        OnClearSelected.InvokeAsync(null);
+    }
+}
+

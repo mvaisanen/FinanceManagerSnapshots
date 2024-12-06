@@ -1,0 +1,80 @@
+﻿@page "/login"
+@inherits Fluxor.Blazor.Web.Components.FluxorComponent
+@inject HttpClient client
+@using Fluxor
+@using System.Text.Json
+@using System.Text
+
+@using AdminFrontend.Blazor.Store.LoginUseCase
+
+<PageTitle>Login</PageTitle>
+
+<div>
+    <h1>Please, log in</h1>
+    <div class="d-flex flex-column">
+        <div class="row">
+            <h1>Log in</h1>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <label>Username</label>
+                <input type="text" class="form-control" name="username" @bind="@username" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <label>Password</label>
+                <input type="password" class="form-control" name="password" @bind="@password" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <button class="btn btn-primary" @onclick=@(() => DoLogin())>Log in</button>
+            </div>
+        </div>
+    </div>
+
+    <p>Jwt state: @LoginState.Value.JwtToken</p>
+</div>
+
+
+
+
+@code {
+    private string username;
+    private string password;
+    private const string baseUrl = "http://localhost:6001"; //TODO: Somehow to settings / compile this into the ui-assembly
+    [Inject]
+    private IState<LoginState> LoginState { get; set; }
+    [Inject]
+    public IDispatcher Dispatcher { get; set; }
+
+    private async Task DoLogin()
+    {
+        var content = new { username = username, password = password };
+        var json = JsonSerializer.Serialize(content);
+        var stringContent = new StringContent(json, Encoding.UTF8, "application/json");
+
+        try
+        {
+            var response = await client.PostAsync($"{baseUrl}/login", stringContent);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Dispatcher.Dispatch(new LoginSucceededAction(jsonString));
+                //Dispatch(new NewLocationAction() { Location = "/" });
+            }
+            else
+            {
+                //Dispatch(new LoginFailedAction(response.ReasonPhrase));
+            }
+        }
+        catch (Exception e)
+        {
+            //Dispatch(new LoginFailedAction(e.Message));
+        }
+
+
+    }
+}

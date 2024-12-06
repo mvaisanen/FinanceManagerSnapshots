@@ -1,0 +1,108 @@
+﻿@using Common.Dtos;
+@using System.Text.Json;
+@using System.Globalization;
+
+
+@if (Buy.Id != BuyIdToEdit)
+{
+    <tr @onclick="DetailRowClicked">
+        <td>@Buy.PurchaseDate.ToShortDateString()</td>
+        <td>@Buy.Amount</td>
+        <td>@Buy.Price.ToString(new NumberFormatInfo { NumberDecimalSeparator = "." })</td>
+        <td />
+    </tr>
+}
+else
+{
+    <tr @onclick="DetailRowClicked">
+        <!--<td><InputDateBox @bind-Value="@EditedData.PurchaseDate" /></td>
+        <td><InputNumberBox @bind-Value="@EditedData.Amount" /></td>
+        <td><InputDoubleBox @bind-Value="@EditedData.Price" /></td>
+        <td><button @onclick="SaveBuyChanges" type="button">Save</button><button @onclick="CancelBuyChanges" type="button">cancel</button></td>-->
+        <td colspan="4">
+            <EditForm Model="@EditedData" OnValidSubmit="SaveBuyChanges">
+                <table>
+                    <tbody>
+                        <tr>
+                            <td><InputDateAdv @bind-Value="@EditedData.PurchaseDate" ValidationFor="@(() => EditedData.PurchaseDate)"/></td>
+                            <td><InputNumber @bind-Value="@EditedData.Amount" /></td>
+                            <td><InputDouble @bind-Value="@EditedData.Price" ValidationFor="@(() => EditedData.Price)"/></td>
+                            <td><button @onclick="SaveBuyChanges" type="button">Save</button><button @onclick="CancelBuyChanges" type="button">cancel</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </EditForm>
+        </td>
+        
+    </tr>
+}
+
+
+
+
+@code {
+    [Parameter]
+    public StockPurchaseDto Buy { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnEditClick { get; set; }
+
+    [Parameter]
+    public EventCallback<StockPurchaseDto> OnSaveClick { get; set; }
+
+    [Parameter]
+    public int BuyIdToEdit { get; set; }
+
+    private StockPurchaseDto EditedData { get; set; } = new StockPurchaseDto();
+
+    private int lastBuyIdEdited;
+
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine($"StockPurchase {Buy.Id} OnInitialized");
+        base.OnInitialized();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Console.WriteLine($"StockPurchase {Buy.Id} OnAfterRender, firstRender={firstRender}");
+        base.OnAfterRender(firstRender);
+    }
+
+    protected override void OnParametersSet()
+    {
+        Console.WriteLine($"StockPurchase {Buy.Id} OnParametersSet(). BuyIdToEdit={BuyIdToEdit}");
+        base.OnParametersSet();
+
+        if (lastBuyIdEdited != BuyIdToEdit)
+        {
+            EditedData = JsonSerializer.Deserialize<StockPurchaseDto>(JsonSerializer.Serialize(Buy)); //Effectively a cloning trick to make sure we dont edit the original
+            lastBuyIdEdited = BuyIdToEdit;
+        }
+    }
+
+
+
+    private void DetailRowClicked()
+    {
+        if (Buy.Id != BuyIdToEdit)
+        {
+            Console.WriteLine($"StockPurchase {Buy.Id}: DetailRowClicked()");
+            OnEditClick.InvokeAsync(Buy.Id);
+        }
+    }
+
+    private void SaveBuyChanges()
+    {
+        Console.WriteLine($"Trying to handle SaveBuyChanges. Current data: PurchaseDate={EditedData.PurchaseDate}, Amount={EditedData.Amount}, price={EditedData.Price}");
+        OnSaveClick.InvokeAsync(EditedData);
+    }
+
+    private void CancelBuyChanges()
+    {
+        Console.WriteLine($"Trying to handle CancelBuyChanges");
+        OnEditClick.InvokeAsync(-1);
+    }
+}
+

@@ -1,0 +1,54 @@
+﻿@using System.Linq.Expressions
+@using Microsoft.AspNetCore.Components;
+@using Microsoft.AspNetCore.Components.Forms;
+@using System;
+@using System.Globalization;
+@inherits InputBase<DateTime>
+
+    <div class="form-control-wrapper">
+        @if (!string.IsNullOrWhiteSpace(Label))
+        {
+            <label class="form-control-label" for="@Id">@Label</label>
+        }
+        <!--<input class="form-control @CssClass" id="@Id" @bind="@CurrentValueAsString" /> -->
+        <input class="form-control @CssClass" id="@Id" value="@BindConverter.FormatValue(CurrentValueAsString)"
+               @onchange="EventCallback.Factory.CreateBinder<string>(this, __value => CurrentValueAsString = __value, CurrentValueAsString)" />
+        <div class="form-control-validation">
+            <ValidationMessage For="@ValidationFor" />
+        </div>
+    </div>
+
+@code {
+    [Parameter] public string Id { get; set; }
+    [Parameter] public string Label { get; set; }
+    [Parameter] public Expression<Func<DateTime>> ValidationFor { get; set; }
+
+    protected override bool TryParseValueFromString(string value, out DateTime result, out string validationErrorMessage)
+    {
+        //TODO: Parsi stringistä datetime, niin että string on järkevää muotoa
+        Console.WriteLine($"Trying to parse datetime from string {value}");
+        DateTimeStyles styles = DateTimeStyles.None;
+        //var ok = DateTime.TryParseExact(value, "d.M.yyyy", System.Globalization.CultureInfo.InvariantCulture, styles, out result);
+        var ok = BindConverter.TryConvertToDateTime(value, CultureInfo.InvariantCulture, "d.M.yyyy", out result);
+        if (ok)
+        {
+            validationErrorMessage = null;
+            return true;
+        }
+        else
+        {
+            Console.WriteLine($"Parsing datetime from {value} returned false");
+            result = default; // new DateTime(1,1,1);
+            validationErrorMessage = "Invalid date";
+            return false;
+        }
+    }
+
+    protected override string FormatValueAsString(DateTime value)
+    {
+        Console.WriteLine($"InputDateAv FormatValueAsString, value={value}");
+        //return value.ToString("d.M.yyyy",System.Globalization.CultureInfo.InvariantCulture);
+        return BindConverter.FormatValue(value, "d.M.yyyy", CultureInfo.InvariantCulture);
+    }
+}
+

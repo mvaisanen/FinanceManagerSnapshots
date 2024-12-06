@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="CurrencyMessages.fs" />
+    <Compile Include="DividendMessages.fs" />
+    <Compile Include="SchedulerMessages.fs" />
+    <Compile Include="ScreenerMessages.fs" />
+    <Compile Include="StockMessages.fs" />
+    <Compile Include="PortfolioMessages.fs" />
+    <Compile Include="WatchlistMessages.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Common\Common.csproj">
+      <Private></Private>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

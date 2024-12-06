@@ -1,0 +1,289 @@
+﻿@page "/portfolio"
+@inject HttpClient client
+@using System.Text
+@using Redux
+@using BlazorRedux
+@using Store
+@using Common.Dtos;
+@using Common.HelperModels;
+@using Microsoft.AspNetCore.Components.Forms;
+@using ClientModels; 
+@using System.IO
+@inherits AppComponent
+
+<div>
+    @if (State.PortfolioState.Portfolio != null)
+    {
+        <h2>Portfolio @State.PortfolioState.Portfolio.Id: @State.PortfolioState.Portfolio.Positions.Count positions</h2>
+        <table style="width: 100%">
+            <tbody>
+                <tr style="vertical-align: top">
+                    <td style="width: 60%">
+                        <table class="table-striped table watchlist-table">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th scope="col">Company</th>
+                                    <th scope="col">Ticker</th>
+                                    <th scope="col">Shares</th>
+                                    <th scope="col">Value €</th>
+                                    <th scope="col">Cost basis</th>
+                                    <th scope="col">Price</th>
+                                    <th scope="col" style={{whiteSpace:'nowrap'}}>Gain %</th>
+                                    <th scope="col">P/E</th>
+                                    <th scope="col" style={{whiteSpace:'nowrap'}}>Yield</th>
+                                    <th style={{width:190}}></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var position in State.PortfolioState.Portfolio.Positions.OrderByDescending(p => CalculateValueInHomeCurrency(p.Buys.Sum(buy => buy.Amount * p.Stock.CurrentPrice), p.Stock.Currency)))
+                                {
+                                    <PortfolioPosition pos="position" CurrencyRates="State.CurrentFxRates" OnEditClick="HandleDetailRowClicked"
+                                                       OnSaveClick="HandlePurchaseEdited" BuyIdToEdit="State.PortfolioState.PurchaseIdToEdit"
+                                                       OnDeletePositionClick="HandleDeletePositionClicked"/>
+                                    <!--<WatchlistStock wls="@wls" EditMode="@(EditableStockId==wls.Id)" OnSaveClick="@ComponentSaveClicked" OnRemoveClick="@ComponentRemoveClicked" OnEditClick="@ComponentEditClicked" />-->
+                                }
+                                <tr>
+                                    <td colspan="2">TOTAL:</td>
+                                    <td></td>
+                                    <td>@CalculateTotalValueInHomeCurrency()</td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td> <!-- TAMA VOISI OLLA HYVA, MUTTA TARVII TIEDON OSTOHETKEN VALUUTTAKURSSEISTA  -->
+                                    <td>@PortfolioPE()</td>
+                                    <td>@TotalYield()</td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div>
+                            <label role="button">
+                                <span style="@(NewPositionVisible ? "display: none" : "")" @onclick="@(() => NewPositionVisible=true)">+</span>
+                                <span style="@(!NewPositionVisible ? "display: none" : "")" @onclick="@(() => NewPositionVisible=false)">-</span> Add purchase
+                            </label>
+
+                            <EditForm Model="@NewPosition" style="@(!NewPositionVisible ? "display: none" : "")" name="NewPosForm" OnValidSubmit="HandleValidSubmit">
+                                <DataAnnotationsValidator />
+                                <ValidationSummary />
+                                <div class="block">
+                                    <label class="input-label">Ticker</label>
+                                    <InputText id="ticker" @bind-Value="NewPosition.StockTicker" />
+                                    <ValidationMessage For="@(() => NewPosition.StockTicker)" />
+                                </div>
+                                <div class="block">
+                                    <label class="input-label">Date</label>
+                                    <InputDate id="date" @bind-Value="NewPosition.PurchaseDate" />
+                                    <ValidationMessage For="@(() => NewPosition.PurchaseDate)" />
+                                </div>
+                                <div class="block">
+                                    <label class="input-label">Amount</label>
+                                    <InputNumber id="amount" @bind-Value="NewPosition.Amount" />
+                                    <ValidationMessage For="@(() => NewPosition.Amount)" />
+                                </div>
+                                <div class="block">
+                                    <!--<label class="input-label">Price</label>-->
+                                    <InputDouble id="price" Label="Price" @bind-Value="NewPosition.Price" ValidationFor="@(() => NewPosition.Price)" />
+                                    <!--<ValidationMessage For="@(() => NewPosition.Price)" />-->
+                                </div>
+
+                                <button type="submit">Add</button>
+                            </EditForm>
+                        </div>
+                        <div style="display:flex; flex-direction: row">
+                            <label>Upload IB csv:</label>
+                            <InputFile OnChange="@UploadIbCsv" />
+                        </div>
+                    </td>
+                    <td style="width: 40%" id="pieHolder">
+                        <p>Positions by value:</p>
+                        <PieChart Id="valuePie"
+                                  DataPoints="State.PortfolioState.Portfolio.Positions.Select(p => new DataPoint(CalculateValueInHomeCurrency(p.TotalAmount * p.Stock.CurrentPrice, p.Stock.Currency), p.Stock.Ticker)).ToList()" />
+                        <p>Positions by dividends:</p>
+                        <PieChart Id="dividendsPie"
+                                  DataPoints="State.PortfolioState.Portfolio.Positions.Select(p => new DataPoint(CalculateValueInHomeCurrency(p.TotalAmount * p.Stock.Dividend, p.Stock.Currency), p.Stock.Ticker)).ToList()" />
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        
+    }
+    else if (!string.IsNullOrEmpty(State.PortfolioState.ErrorText))
+    {
+        <p>Error getting portfolio: @State.PortfolioState.ErrorText</p>
+    }
+    else
+    {
+        <p>Loading...</p>
+    }
+
+    @if (State.PortfolioState.Portfolio != null && !string.IsNullOrEmpty(State.PortfolioState.ErrorText))
+    {
+        <p>@State.PortfolioState.ErrorText</p>
+    }
+
+</div>
+
+@code {
+
+    private bool NewPositionVisible = false;
+    private AddToPortfolioDto NewPosition = new AddToPortfolioDto();
+    private List<DataPoint> PieDataPoints = new List<DataPoint>();
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Console.WriteLine("PortfolioPage OnInitialized(). Token is: " + State.LoginState.JwtToken);
+        //TODO: Ei haeta listaa jos se on jo kerran haettu?
+        if (State.PortfolioState.Portfolio == null)
+            Actions.GetPortfolio(client, State.LoginState.JwtToken, Dispatch);
+        if (State.CurrentFxRates == null)
+            Actions.GetFxRates(client, State.LoginState.JwtToken, Dispatch);
+    }
+
+    protected override void OnParametersSet()
+    {
+        Console.WriteLine($"PortfolioPage OnParametersSet()");
+        base.OnParametersSet();
+        //PieDataPoints = State.PortfolioState.Portfolio.Positions.Select(p => new DataPoint(p.TotalAmount * p.Stock.CurrentPrice, p.Stock.Ticker)).ToList();
+    }
+
+
+    private void HandleValidSubmit()
+    {
+        Console.WriteLine("Trying to handle adding purchase to portfolio...");
+        NewPosition.PortfolioId = State.PortfolioState.Portfolio.Id;
+        var purchase = NewPosition;
+        Actions.AddPurchase(client, State.LoginState.JwtToken, Dispatch, purchase);
+    }
+
+    private void HandlePurchaseEdited(StockPurchaseDto purchase)
+    {
+        Console.WriteLine("Trying to handle editing purchase in portfolio...");
+        Actions.EditPurchase(client, State.LoginState.JwtToken, Dispatch, purchase);
+    }
+
+    private void HandleDetailRowClicked(int buyId)
+    {
+        Console.WriteLine($"PortfolioPage HandleDetailRowClicked - clicked={buyId}, current PurchaseIdToEdit={State.PortfolioState.PurchaseIdToEdit}");
+        if (State.PortfolioState.PurchaseIdToEdit != buyId)
+        {
+            //BuyToEdit = buyId;
+            Dispatch(new PurchaseToEditChangedAction(buyId));
+            //StateHasChanged();
+        }
+    }
+
+    private void HandleDeletePositionClicked(int positionId)
+    {
+        Console.WriteLine($"PortfolioPage HandleDeletePositionClicked - clicked={positionId}");
+
+        //Dispatch(new PurchaseToEditChangedAction(buyId));
+        Actions.DeletePortfolioPosition(client, State.LoginState.JwtToken, Dispatch, State.PortfolioState.Portfolio.Id, positionId);
+
+    }
+
+    private async void UploadIbCsv(InputFileChangeEventArgs e)
+    {
+        Console.WriteLine("Trying to handle UploadIbCsv in portfolio...");
+        var file = e.File;
+        var buff = new byte[file.Size];
+        await file.OpenReadStream().ReadAsync(buff);
+        var fileUpload = new FileUpload() { Data = buff, Size = file.Size };
+        Actions.UploadIbPortfolioCsv(client, State.LoginState.JwtToken, Dispatch, fileUpload);
+    }
+
+
+    //TODO: Ehkä mieluummin jonkinlainen onPortfolioChanged tms joka päivittää kaikki yhdessä funktiossa, kun joudutaan kuitnekin luuppaamaan samat asiat
+    private decimal CalculateTotalValueInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.00M;
+
+        var value = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00; //TODO: Actual fx-rate
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            //TODO: Jos ei löydy, jokin virheteksti tms näkyviin
+            var val = position.TotalAmount * position.Stock.CurrentPrice / fxRate;
+            value += val;
+        }
+        return decimal.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private double CalculateValueInHomeCurrency(double valueInLocalCurrency, Common.Currency localCurrency)
+    {
+        var value = 0.00;
+        var fxRate = 1.00; //TODO: Actual fx-rate
+        if (State.CurrentFxRates != null)
+            fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, localCurrency);
+        return valueInLocalCurrency / fxRate;
+    }
+
+    private decimal PortfolioPE()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 999;
+        var value = 0.0;
+        var earnings = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            value += position.TotalAmount * position.Stock.CurrentPrice;
+            earnings += position.TotalAmount * position.Stock.EpsTtm;
+        }
+        var pe_double = earnings > 0 ? (value / earnings) : 999;
+        return decimal.Round((decimal)pe_double, 1, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalDividendsInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            divs += position.TotalAmount * position.Stock.Dividend / fxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+
+
+    private decimal EstimatedNtmDividendsIncludingGrowth()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+
+            var growth = (position.Stock.DivGrowth5 + position.Stock.DivGrowth3 + position.Stock.DivGrowth1)/3.0; //Average of 1, 3 and 5 year growth rates
+
+            divs += position.TotalAmount * position.Stock.Dividend * (1.0+growth/100.0) / fxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalYield()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.00M;
+        var divs = 0.0;
+        var value = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            divs += position.TotalAmount * position.Stock.Dividend / fxRate;
+            value += position.TotalAmount * position.Stock.CurrentPrice / fxRate;
+        }
+        var yield_double = value > 0 ? 1.0 * divs / value * 100.0 : 0.0;
+        return decimal.Round((decimal)yield_double, 2, MidpointRounding.AwayFromZero);
+    }
+}

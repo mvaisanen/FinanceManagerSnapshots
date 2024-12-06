@@ -1,0 +1,273 @@
+﻿@page "/screener"
+@inject HttpClient client
+@using System.Text
+@using System.Net.Http.Headers;
+@using System.Text.Json;
+@using Redux
+@using BlazorRedux
+@using Store
+@using Common.Dtos;
+@using Common.HelperModels;
+@using Common.Util;
+@using Common;
+@using ClientModels;
+@using BlazorFrontendNew.Client.Util;
+@inherits AppComponent
+
+<div>
+
+    <h2>Screener</h2>
+
+    <div class="row">
+        <div class="col-md-auto">
+            <div class="row">
+                <button type="button" class="btn btn-secondary" @onclick="GetAristocrats">Get aristocrats</button>
+            </div>
+            <div class="row">
+                <button type="button" class="btn btn-secondary" @onclick="GetBasedOnPlan">Get by plan</button>
+            </div>
+            <div class="row">
+                <EditForm Model="@SearchParams">
+                    <div class="container-table">
+                        <div class="row">
+                            <label for="years" style="font-size: 0.85rem">DG years min:</label>
+                            <div style="padding: 0.1px"><InputNumber id="years" @bind-Value="SearchParams.DgYearsMin" /></div>
+                        </div>
+                        <div class="row">
+                            <label for="cyoc" style="font-size: 0.85rem">Cumulative yoc min:</label>
+                            <InputDouble Style="padding: 0.1px" id="cyoc" @bind-Value="SearchParams.CumulativeYoCMin" ValidationFor="@(() => SearchParams.CumulativeYoCMin)" />
+                        </div>
+                        <div class="row">
+                            <label for="yield" style="font-size: 0.85rem">Yield min:</label>
+                            <InputDouble Style="padding: 0.1px" id="yield" @bind-Value="SearchParams.YieldMin" ValidationFor="@(() => SearchParams.YieldMin)" />
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+        <div class="col">
+            <table style="width: 100%" class="table-striped table watchlist-table">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Company</th>
+                        <th>Ticker</th>
+                        <th>Price</th>
+                        <th>Years</th>
+                        <th>P/E</th>
+                        <th>Yield</th>
+                        <th>DGR 1y</th>
+                        <th>DGR 3y</th>
+                        <th>DGR 5y</th>
+                        <th>DGR 10y</th>
+                        <th>Divs 20y</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var stock in Results.OrderByDescending(r => CumulativeYoCIn20Y(r.Yield, @estimateGrowth(r.DivGrowth1, r.DivGrowth3, r.DivGrowth5, r.DivGrowth10))))
+                    {
+                        <tr>
+                            <td>@stock.Name</td>
+                            <td>@stock.Ticker</td>
+                            <td>@stock.CurrentPrice</td>
+                            <td>@stock.DGYears</td>
+                            <td>@FormatOutput(stock.CurrentPrice / stock.EpsTtm, 1)</td>
+                            <td>@FormatOutput(stock.Yield, 2)</td>
+                            <td>@FormatOutput(stock.DivGrowth1, 1)</td>
+                            <td>@FormatOutput(stock.DivGrowth3, 1)</td>
+                            <td>@FormatOutput(stock.DivGrowth5, 1)</td>
+                            <td>@FormatOutput(stock.DivGrowth10, 1)</td>
+                            @{
+                                var cyoc = CumulativeYoCIn20Y(stock.Yield, @estimateGrowth(stock.DivGrowth1, stock.DivGrowth3, stock.DivGrowth5, stock.DivGrowth10));
+                                if (cyoc >= 1.20 * ReferenceYoc)
+                                {
+                                    <td style="background-color: #8dff33">@FormatOutput(cyoc, 2) </td>
+                                }
+                                else if (cyoc >= ReferenceYoc)
+                                {
+                                    <td style="background-color: #85cffa">@FormatOutput(cyoc, 2) </td>
+                                }
+                                else
+                                {
+                                    <td>@FormatOutput(cyoc, 2) </td>
+                                }
+                            }
+                            <!--<td ng-class="{'color-blue': screener.totalReturnIn20Y(stock.Yield/100.0, 1+screener.estimateGrowth(stock.DivGrowth1,stock.DivGrowth3,stock.DivGrowth5,stock.DivGrowth10)/100.0) >= 23}">{{screener.totalReturnIn20Y(stock.Yield/100.0, 1+screener.estimateGrowth(stock.DivGrowth1,stock.DivGrowth3,stock.DivGrowth5,stock.DivGrowth10)/100.0) | number:1}}</td>-->
+                            <!--<td>@FormatOutput(CumulativeYoCIn20Y(stock.Yield, @estimateGrowth(stock.DivGrowth1, stock.DivGrowth3, stock.DivGrowth5, stock.DivGrowth10)), 2) </td>-->
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private List<StockDTO> Results = new List<StockDTO>();
+    private double ReferenceYoc;
+    //private int DGyearsMin { get; set; }
+    //private double CYocMin { get; set; }
+    private ScreenerSearchParams SearchParams = new ScreenerSearchParams();
+
+#if DEBUG
+    private const string baseUrl = "http://localhost:6001";
+#else
+    private const string  baseUrl = "http://104.244.79.30:6001";
+#endif
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        if (State.UserDividends?.DividendPlan == null)
+        {
+            Console.WriteLine("ScreenerPage OnInitialized(): Dividend plan is null, fethcing..");
+            Actions.GetDividendPlan(client, State.LoginState.JwtToken, Dispatch);
+        }
+        //GetScreenerResults(client, State.LoginState.JwtToken);
+        ReferenceYoc = CumulativeYoCIn20Y(3.0, 6.6);
+    }
+
+    private void GetAristocrats()
+    {
+        GetScreenerResults(client, State.LoginState.JwtToken);
+    }
+
+
+
+
+    private async void GetBasedOnPlan()
+    {
+        var jwt = State.LoginState.JwtToken;
+        if (string.IsNullOrEmpty(jwt))
+        {
+            Console.WriteLine("Jwt is null or empty, cannot get screener results...");
+            return;
+        }
+
+        Console.WriteLine($"GetBasedOnPlan");
+        var baseGrowth = 6.6.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var minDgYears = SearchParams.DgYearsMin;
+
+        var request = new HttpRequestMessage
+        {
+            //SearchByEndDivs(double baseYield, double baseGrowth, int years)
+            RequestUri = new Uri($"{baseUrl}/api" + $"/screener/searchbyenddivs?baseYield={3}&baseGrowth={baseGrowth}&years=20&mindgyears={minDgYears}"),
+            Method = HttpMethod.Get,
+        };
+
+        var token = ExtendedJsonSerializer.Deserialize<JwtToken>(jwt);
+        request.Headers.Add("Authorization", "Bearer " + token.accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        try
+        {
+            var response = await client.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("Fetched screener search results as string: " + jsonString);
+                try
+                {
+                    Console.WriteLine("Deserializing json...");
+                    Results = ExtendedJsonSerializer.Deserialize<List<StockDTO>>(jsonString);
+                    Console.WriteLine("Results saved");
+                    StateHasChanged();
+                }
+                catch (JsonException jse)
+                {
+                    //todo: show error
+                }
+            }
+            else
+            {
+                //todo: show error
+            }
+        }
+        catch (Exception e)
+        {
+            //todo: show error
+        }
+    }
+
+    private double CumulativeYoCIn20Y(double divYield, double divGrowth)
+    {
+        int principal = 100;
+        return DivMath.CalculateEndDividends(principal, divYield, divGrowth, 20);
+
+    }
+
+
+    private double estimateGrowth(double dgr1, double dgr3, double dgr5, double dgr10)
+    {
+        return new List<double>() { dgr1, dgr3, dgr5, dgr10 }.Min();
+    }
+
+
+
+    private async void GetScreenerResults(HttpClient client, string jwt)
+    {
+        Console.WriteLine("GetScreenerResults(): Token is " + jwt);
+        if (string.IsNullOrEmpty(jwt))
+        {
+            Console.WriteLine("Jwt is null or empty, cannot get screener results...");
+            return;
+        }
+
+        var request = new HttpRequestMessage
+        {
+            RequestUri = new Uri($"{baseUrl}/api" + "/screener"),
+            Method = HttpMethod.Get,
+        };
+
+        var token = ExtendedJsonSerializer.Deserialize<JwtToken>(jwt);
+        Console.WriteLine("Serialized jwt, accessToken=" + token.accessToken);
+        request.Headers.Add("Authorization", "Bearer " + token.accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        try
+        {
+            var response = await client.SendAsync(request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("Fetched screener results as string: " + jsonString);
+                try
+                {
+                    Console.WriteLine("Deserializing json...");
+                    Results = ExtendedJsonSerializer.Deserialize<List<StockDTO>>(jsonString);
+                    Console.WriteLine("Results saved");
+                    StateHasChanged();
+                }
+                catch (JsonException jse)
+                {
+                    //todo: show error
+                }
+            }
+            else
+            {
+                //todo: show error
+            }
+        }
+        catch (Exception e)
+        {
+            //todo: show error
+        }
+
+    }
+
+
+    //TODO: This is same as in portfoliopage, refactor into general util class / extension method or sometin
+    //Temp solution until MS implements output formatting, only works for showing values, editing would be problematic.
+    private decimal FormatOutput(double value, int decimals)
+    {
+        //var bigInt = (Math.Floor(value * (10 ^ decimals))); //123.45678, 3 digs -> bigInt = 123456 (type decimal)
+        //var str = bigInt.ToString().ins
+        //Console.WriteLine("FormatOutput for: " + value.ToString());
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return -999;
+        return decimal.Round((decimal)value, decimals, MidpointRounding.AwayFromZero);
+    }
+
+}

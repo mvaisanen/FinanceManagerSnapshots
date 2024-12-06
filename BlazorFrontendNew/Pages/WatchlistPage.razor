@@ -1,0 +1,169 @@
+﻿@page "/watchlist"
+@inject HttpClient client
+@using System.Text
+@using Redux
+@using BlazorRedux
+@using Store
+@using Common.Dtos;
+@inherits AppComponent
+
+<div>
+    @if (State.WatchlistState.Watchlist != null)
+    {
+        <h2>@State.WatchlistState.Watchlist.Name</h2>
+        <table class="table table-striped watchlist-table table-sm">
+            <thead class="thead-light">
+                <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Ticker</th>
+                    <th scope="col">P/E</th>
+                    <th scope="col" style={{whiteSpace:'nowrap'}}>Yield %</th>
+                    <th scope="col">Price</th>
+                    <th scope="col" style={{whiteSpace:'nowrap'}}>Target price</th>
+                    <th scope="col">Notify</th>
+                    <th style={{width:190}}></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var wls in State.WatchlistState.Watchlist.Stocks)
+                {
+                    <WatchlistStock wls="@wls" EditMode="@(EditableStockId==wls.Id)" OnSaveClick="@ComponentSaveClicked" OnRemoveClick="@ComponentRemoveClicked" OnEditClick="@ComponentEditClicked" />
+                }
+            </tbody>
+        </table>
+
+        <div>
+            <label style="text-align:center; display:block">Add to watchlist:</label>
+            <div>
+                <label style="margin-right: 5px">Stock:</label>
+
+                <ComboBox OnInputChanged="@StockSearchChanged" DisplayList="SearchResults" SelectedItem="@StockToAdd"
+                                                    OnItemSelected="@StockSelectedFromList" OnClearSelected="@StockSelectedCleared" />
+                <!--<input type="text" list="data" @oninput="@StockSearchChanged" />-->
+                <!--
+                <input type="text" list="data" @oninput="@StockSearchChanged"/>
+                <ul class="autosuggest-list">
+                    @foreach (var stock in SearchResults)
+                    {
+                        <li key="@("li"+stock.Id)">@stock.Name</li>
+                    }
+                </ul>
+                 -->
+
+                <button @onclick="@AddStockToWatchlist" disabled="@(StockToAdd == null)">Add</button>
+                <!--<div className={(this.state.newStock !=undefined || this.props.closestStockMatches.length= =0) ? "autosuggest-box-hidden" : "autosuggest-box" }>
+                    <ul className="autosuggest-list">
+                        {this.props.closestStockMatches.map((item) =>
+                        this.state.newStock == undefined &&
+                        <li key={"li"+item.id} onClick={this.StockToAddClicked} data-id={item.id}>{item.name}</li>
+                        )}
+                    </ul>
+                </div>-->
+
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(State.WatchlistState.ErrorText))
+    {
+        <p>Error getting watchlist: @State.WatchlistState.ErrorText</p>
+    }
+    else
+    {
+        <p>Loading...</p>
+    }
+
+    @if (State.WatchlistState.Watchlist != null && !string.IsNullOrEmpty(State.WatchlistState.ErrorText))
+    {
+        <p>@State.WatchlistState.ErrorText</p>
+    }
+
+    @if (!string.IsNullOrEmpty(findClosestErrorText))
+    {
+        <p>@findClosestErrorText</p>
+    }
+
+</div>
+
+@code {
+
+    private int EditableStockId { get; set; }
+    private StockDTO StockToAdd { get; set; } //TODO: handling
+    private List<StockDTO> SearchResults { get; set; }
+    private string findClosestErrorText { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Console.WriteLine("WatchlistPage OnInitialized(). Token is: " + State.LoginState.JwtToken);
+        //TODO: Ei haeta listaa jos se on jo kerran haettu?
+        Actions.GetWatchlist(client, State.LoginState.JwtToken, Dispatch);
+        SearchResults = new List<StockDTO>();
+    }
+
+    //One of the rows, ie WatchlistStocks had their "Edit" clicked
+    void ComponentEditClicked(int id)
+    {
+        this.EditableStockId = id;
+    }
+
+    void ComponentRemoveClicked(int id)
+    {
+        this.EditableStockId = -1;
+        Actions.RemoveFromWatchlist(client, State.LoginState.JwtToken, Dispatch, State.WatchlistState.Watchlist.Id, id);
+    }
+
+    void ComponentSaveClicked(WatchlistStockDTO wls)
+    {
+        this.EditableStockId = -1;
+        //TODO: Call to API to remve this wls
+        Actions.SaveWatchlistStock(client, State.LoginState.JwtToken, Dispatch, State.WatchlistState.Watchlist.Id, wls);
+    }
+
+    async void StockSearchChanged(string search)
+    {
+        Console.WriteLine("Haku muuttui: " + search);
+
+        if (string.IsNullOrEmpty(search))
+        {
+            SearchResults.Clear();
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            var res = await Actions.FindClosestStockMatches(client, State.LoginState.JwtToken, search);
+            var str = "";
+            res.ForEach(r => str += r.Ticker + ", ");
+            Console.WriteLine("FindClosestStockMatches result: " + str);
+            SearchResults = res;
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            findClosestErrorText = "Error fetching matches: " + e.Message;
+            SearchResults.Clear();
+            StateHasChanged();
+        }
+    }
+
+    void StockSelectedFromList(StockDTO stock)
+    {
+        Console.WriteLine("Stock selected: " + stock.Ticker);
+        StockToAdd = stock;
+    }
+
+    void StockSelectedCleared()
+    {
+        StockToAdd = null;
+    }
+
+    private void AddStockToWatchlist(MouseEventArgs e)
+    {
+        Console.WriteLine("AddStockToWatchlist");
+        var wls = new WatchlistStockDTO();
+        wls.StockId = StockToAdd.Id;
+        Actions.SaveWatchlistStock(client, State.LoginState.JwtToken, Dispatch, State.WatchlistState.Watchlist.Id, wls);
+    }
+
+}

@@ -1,0 +1,157 @@
+﻿@page "/"
+@using Redux
+@using BlazorRedux
+@using Store
+@using BlazorFrontendNew.Client.ClientModels
+@using Common
+@inject HttpClient client
+@inherits AppComponent
+
+
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-3">
+            <h2>Portfolio</h2>
+            <p>Total portfolio value: @CalculateTotalValueInHomeCurrency() €</p>
+        </div>
+        <div class="col-md-3">
+            <h2>Watchlist</h2>
+            <div ng-repeat="stock in homeData.closestWatchlistStocks">
+                <p>{{stock.StockTicker}} : {{stock.difference | number:1}}%</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <h2>Budgets</h2>
+            <p>Average monthly budget (ttm): xxx.xx €</p>
+            <ul>
+                <li>Mortgage yyy.yy</li>
+                <li>Maintenance charge yyy.yy</li>
+                <li>Food etc yyy.yy</li>
+                <li>Pets yyy.yy</li>
+                <li>...</li>
+            </ul>
+        </div>
+        <div class="col-md-3">
+            <h2>Dividends</h2>
+            <p>This year dividends: @YtdDividendsInHomeCurrency() €</p>
+            <p>Forward 12 month dividends: @TotalDividendsInHomeCurrency() €</p>
+            <p>Forward dividends after tax: @(TotalDividendsInHomeCurrency()*(1M-0.255M)) €</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!--<canvas id="bar" class="chart chart-bar" chart-data="homeData.DividendTimeline.Amounts" chart-options="{title:{display:true, text:'Dividend goals & progress'}}"
+                    chart-labels="homeData.DividendTimeline.Years" chart-series="homeData.DividendTimeline.Series" />-->
+            <BarChart Id="dividendsChart"
+                      DoubleDataPoints="DividendsByYear()" />
+        </div>
+    </div>
+    
+    <!--<div class="row">
+        <p>Your jwt token is: @State.LoginState.JwtToken</p>
+    </div>-->
+
+</div>
+
+
+
+
+
+@code
+{
+    //TODO: These needs to come from backend api / database
+    Dictionary<int, double> GoalDivs = new Dictionary<int, double>()
+    {
+        {2013, 550},
+        {2014, 800},
+        {2015, 1125},
+        {2016, 1575},
+        {2017, 2153},
+        {2018, 2788},
+        {2019, 3487},
+        {2020, 4255},
+        {2021, 4701},
+        {2022, 5101},
+        {2023, 5501},
+        {2024, 5901},
+        {2025, 6601},
+    };
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Console.WriteLine("Index OnInitialized()");
+        Actions.GetPortfolio(client, State.LoginState.JwtToken, Dispatch);
+        Actions.GetFxRates(client, State.LoginState.JwtToken, Dispatch);
+        Actions.GetDividends(client, State.LoginState.JwtToken, Dispatch);
+    }
+
+    private List<DoubleDataPoint> DividendsByYear()
+    {
+        Console.WriteLine("DividendsByYear, State.UserDividens:");
+        Console.WriteLine(State.UserDividends);
+        Dictionary<int, double> yearlyDivs = new Dictionary<int, double>();
+
+        foreach (var div in State.UserDividends.Dividends)
+        {
+            var fxRate = div.FxRate;
+            if (fxRate < 0.001 && State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, (Currency)Enum.Parse(typeof(Currency),div.Currency)); //TODO: This is wrong, using current rate for history
+            if (yearlyDivs.ContainsKey(div.PaymentDate.Year))
+                yearlyDivs[div.PaymentDate.Year] += div.TotalReceived / fxRate;
+            else
+                yearlyDivs.Add(div.PaymentDate.Year, div.TotalReceived / fxRate);
+        }
+
+        return yearlyDivs.Select(yd => new DoubleDataPoint(yd.Value, GoalDivs[yd.Key], yd.Key.ToString())).ToList();
+    }
+
+    //TODO: Same function as in portfoliopage, collect/reuse somehow
+    private decimal CalculateTotalValueInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.00M;
+
+        var value = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00; //TODO: Actual fx-rate
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            //TODO: Jos ei löydy, jokin virheteksti tms näkyviin
+            var val = position.TotalAmount * position.Stock.CurrentPrice / fxRate;
+            value += val;
+        }
+        return decimal.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalDividendsInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            divs += position.TotalAmount * position.Stock.Dividend / fxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal YtdDividendsInHomeCurrency()
+    {
+        if (State.UserDividends.Dividends == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var div in State.UserDividends.Dividends)
+        {
+            if (div.PaymentDate.Year == DateTime.UtcNow.Year)
+                divs += div.TotalReceived / div.FxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+}

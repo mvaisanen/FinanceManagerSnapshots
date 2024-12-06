@@ -1,0 +1,529 @@
+﻿@page "/dividends"
+@inject HttpClient client
+@using System.Text
+@using Redux
+@using BlazorRedux
+@using Store
+@using Common.Dtos;
+@using Common.HelperModels;
+@using Microsoft.AspNetCore.Components.Forms;
+@using ClientModels; 
+@using System.IO
+@using System.Text.Json
+@inherits AppComponent
+
+<div class="container-fluid">
+    @if (State.UserDividends?.Dividends != null && State.PortfolioState?.Portfolio != null)
+    {
+        <div class="row">
+            <div class="col-lg-5">
+                <table class="table-striped table watchlist-table">
+                    <thead class="thead-light">
+                        <tr>
+                            <th scope="col">Company</th>
+                            <th scope="col">Ticker</th>
+                            <th scope="col" style={{whiteSpace:'nowrap'}}>Yield %</th>
+                            <th scope="col">DGR est.</th>
+                            <th scope="col">SSD score</th>
+                            <th scope="col">Dividends</th>
+                            <th scope="col">% of Port.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var position in State.PortfolioState.Portfolio.Positions.OrderByDescending(p => @CalculateValueInHomeCurrency(p.Stock.Dividend*p.Buys.Sum(b => b.Amount), p.Stock.Currency)))
+                        {
+                            var positionDivs = CalculateValueInHomeCurrency(position.Stock.Dividend*position.Buys.Sum(b => b.Amount), position.Stock.Currency);
+                            <tr>
+                                <td>@position.Stock.Name</td>
+                                <td>@position.Stock.Ticker</td>
+                                <td>@FormatOutput(position.Stock.Yield, 2)</td>
+                                <td>@FormatOutput(EstimateDivGrowth(position.Stock), 1)</td>
+                                <td title=@(position.Stock.SSDScoreDate != null ? position.Stock.SSDScoreDate.ToString() : "Invalid date")>@(position.Stock.SSDSafetyScore != null ? position.Stock.SSDSafetyScore.ToString() : "-")</td>
+                                <td>@FormatOutput(positionDivs, 0)</td>
+                                <td>@FormatOutput(positionDivs*100.0/Decimal.ToDouble(TotalDividendsInHomeCurrency()),1)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td colspan="2">TOTAL:</td>
+                            <td>@TotalYield()</td>
+                            <td>@TotalDividendsGrowth()</td>
+                            <td></td>
+                            <td>@TotalDividendsInHomeCurrency()</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="col-lg-6">
+                <h3>Dividends summary</h3>
+                <p>Forward dividends: @TotalDividendsInHomeCurrency()€</p>
+                <p>Forward dividends after growth: @EstimatedNtmDividendsIncludingGrowth()€</p>
+                <div style="display:flex; flex-direction: row">
+                    <label>Upload IB dividends:</label>
+                    <InputFile OnChange="@UploadIbDivs" />
+                    <!--<InputCheckbox @bind-Value="@MultiAccount" />-->
+                </div>
+                <div style="display:flex; flex-direction: row">
+                    <label>Upload Nordnet dividends:</label>
+                    <InputFile OnChange="@UploadNordnetDivs" />
+                </div>
+
+                <h3>Goals</h3>
+                <EditForm Model="@EditedDivPlan">
+                    @if (EditDivGoals)
+                    {
+                        <div class="form-group row">
+                            <div class="col-xs-1">
+                                <label>Start year:</label>
+                                <InputNumber @bind-Value="@EditedDivPlan.StartYear" class="form-control form-control-sm"/>
+                            </div>
+                            <div class="col-xs-2">
+                                <label>Start dividends:</label>
+                                <InputDouble @bind-Value="@EditedDivPlan.StartDividends" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-xs-2">
+                                <label>Yearly investment</label>
+                                <InputDouble @bind-Value="@EditedDivPlan.YearlyInvestment" class="form-control form-control-sm" />                           
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <div class="col-xs-1">
+                                <label>Current growth</label>
+                                <InputDouble @bind-Value="@EditedDivPlan.CurrentDivGrowth" class="form-control form-control-sm"/>
+                            </div>
+
+                            <div class="col-xs-2">
+                                <label>New investments growth</label>
+                                <InputDouble @bind-Value="@EditedDivPlan.NewDivGrowth" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-xs-1">
+                                <label>New investments yield</label>
+                                <InputDouble @bind-Value="@EditedDivPlan.Yield" class="form-control form-control-sm"/>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+
+                            <div class="col-xs-2">
+                                <label>Years</label>
+                                <InputNumber @bind-Value="@EditedDivPlan.Years" class="form-control form-control-sm"/>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-group row">
+                            <div class="col-xs-1">
+                                <label>Start year:</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="number" disabled value="@State.UserDividends.DividendPlan.StartYear" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                            <div class="col-xs-2">
+                                <label>Start dividends:</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="text" disabled value="@State.UserDividends.DividendPlan.StartDividends" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                            <div class="col-xs-2">
+                                <label>Yearly investment</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="text" disabled value="@State.UserDividends.DividendPlan.YearlyInvestment" class="form-control form-control-sm"/>
+                                }   
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                             <div class="col-xs-2">
+                                <label>Current growth</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="text" disabled value="@State.UserDividends.DividendPlan.CurrentDivGrowth" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                            <div class="col-xs-2">
+                                <label>New investments growth</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="text" disabled value="@State.UserDividends.DividendPlan.NewDivGrowth" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                            <div class="col-xs-1">
+                                <label>New investments yield</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="text" disabled value="@State.UserDividends.DividendPlan.Yield" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+
+                        </div>
+                        <div class="form-group row">
+   
+                            <div class="col-xs-2">
+                                <label>Years</label>
+                                @if (State.UserDividends?.DividendPlan != null)
+                                {
+                                    <input type="number" disabled value="@State.UserDividends.DividendPlan.Years" class="form-control form-control-sm"/>
+                                }
+                                else
+                                {
+                                    <input type="text" disabled value="No data" class="form-control form-control-sm"/>
+                                }
+                            </div>
+                        </div>
+                    }
+                    <div class="form-group row">
+                        <div class="col-xs-2">
+                            @if (EditDivGoals)
+                            {
+                                <button @onclick="EditGoals" type="button">Revert</button>
+                            }
+                            else
+                            {
+                                <button @onclick="EditGoals" type="button">Edit</button>
+                            }
+                            <button @onclick="SaveGoalChanges" type="button">Save</button>
+                        </div>
+                    </div>
+                </EditForm>
+                <div>
+                    <!--<BarChart Id="divGoals" DoubleDataPoints="@DividendGoals" />-->
+                    @if (State.UserDividends?.DividendPlan != null)
+                    {
+                        <BarChart Id="divGoals" DoubleDataPoints="@GoalsFromPlan(State.UserDividends.DividendPlan)" />
+                    }
+                </div>
+                <div class="row">
+                    <div class="col-lg-6">
+                        <h4>Yields and growth rates producing same result as plan:</h4>
+                        @if (State.UserDividends?.DividendPlan?.AlternativeYieldsAndGrowthsBasedOnPlan != null)
+                        {
+                            <table class="table-striped table watchlist-table">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>Yield</th>
+                                        <th>Growth</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach(var pair in State.UserDividends.DividendPlan.AlternativeYieldsAndGrowthsBasedOnPlan)
+                                    {
+                                        <tr>
+                                            <td>@pair.Key</td>
+                                            <td>@FormatOutput(pair.Value,1)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>                   
+                </div>
+            </div>
+
+
+        </div>
+        
+        /*
+        <h2>Dividends & goals</h2>
+        <table>
+            <tbody>
+                <tr style="vertical-align: top">
+                    <td >
+                        <table class="table-striped table watchlist-table">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th scope="col">Company</th>
+                                    <th scope="col">Ticker</th>
+                                    <th scope="col" style={{whiteSpace:'nowrap'}}>Yield %</th>
+                                    <th scope="col">Dividends</th>
+                                    <th scope="col">% of Port.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var position in State.PortfolioState.Portfolio.Positions.OrderByDescending(p => @CalculateValueInHomeCurrency(p.Stock.Dividend*p.Buys.Sum(b => b.Amount), p.Stock.Currency)))
+                                {
+                                    var positionDivs = CalculateValueInHomeCurrency(position.Stock.Dividend*position.Buys.Sum(b => b.Amount), position.Stock.Currency);
+                                    <tr>
+                                        <td>@position.Stock.Name</td>
+                                        <td>@position.Stock.Ticker</td>
+                                        <td>@FormatOutput(position.Stock.Yield, 2)</td>
+                                        <td>@FormatOutput(positionDivs, 0)</td>
+                                        <td>@FormatOutput(positionDivs*100.0/Decimal.ToDouble(TotalDividendsInHomeCurrency()),1)</td>
+                                    </tr>
+                                }
+                                <tr>
+                                    <td colspan="2">TOTAL:</td>
+                                    <td>@TotalYield()</td>
+                                    <td>@TotalDividendsInHomeCurrency()</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <div style="display:flex; flex-direction: row">
+                            <label>Upload IB dividends:</label>
+                            <InputFile OnChange="@UploadIbDivs" />
+                        </div>
+                    </td>
+                    <td>                        
+                        <p>Forward dividends: @TotalDividendsInHomeCurrency()€</p>
+                        <p>Forward dividends after growth: @EstimatedNtmDividendsIncludingGrowth()€</p>
+                    </td>
+
+                </tr>
+            </tbody>
+        </table>*/
+    }
+    else if (!string.IsNullOrEmpty(State.UserDividends.ErrorText))
+    {
+        <p>Error getting dividends: @State.UserDividends.ErrorText</p>
+    }
+    else
+    {
+        <p>Loading...</p>
+    }
+
+    @if (State.UserDividends.Dividends != null && !string.IsNullOrEmpty(State.UserDividends.ErrorText))
+    {
+        <p>@State.UserDividends.ErrorText</p>
+    }
+
+</div>
+
+@code {
+    private DividendsPlanDto EditedDivPlan = new DividendsPlanDto();
+    private bool EditDivGoals;
+    //private List<DoubleDataPoint> DividendGoals = new List<DoubleDataPoint>();
+    private bool MultiAccount;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Console.WriteLine("PortfolioPage OnInitialized(). Token is: " + State.LoginState.JwtToken);
+        //TODO: Ei haeta listaa jos se on jo kerran haettu?
+        if (State.PortfolioState?.Portfolio == null)
+        {
+            Console.WriteLine("DividendsPage OnInitialized(): Portfolio is null, fethcing..");
+            Actions.GetPortfolio(client, State.LoginState.JwtToken, Dispatch);
+        }
+        if (State.UserDividends?.DividendPlan == null)
+        {
+            Console.WriteLine("DividendsPage OnInitialized(): Dividend plan is null, fethcing..");
+            Actions.GetDividendPlan(client, State.LoginState.JwtToken, Dispatch);
+        }
+
+    }
+
+    protected override void OnParametersSet()
+    {
+        Console.WriteLine($"DividendsPage OnParametersSet()");
+        base.OnParametersSet();
+        //PieDataPoints = State.PortfolioState.Portfolio.Positions.Select(p => new DataPoint(p.TotalAmount * p.Stock.CurrentPrice, p.Stock.Ticker)).ToList();
+    }
+
+
+    private async void UploadIbDivs(InputFileChangeEventArgs e)
+    {
+        Console.WriteLine("Trying to handle UploadIbDivs in dividends...");
+        var file = e.File;
+        var buff = new byte[file.Size];
+        await file.OpenReadStream().ReadAsync(buff);
+        var fileUpload = new FileUpload() { Data = buff, Size = file.Size };
+        Actions.UploadIbDividendsCsv(client, State.LoginState.JwtToken, Dispatch, fileUpload, MultiAccount);
+    }
+
+    private async void UploadNordnetDivs(InputFileChangeEventArgs e)
+    {
+        Console.WriteLine("Trying to handle UploadNordnetDivs in dividends...");
+        var file = e.File;
+        var buff = new byte[file.Size];
+        await file.OpenReadStream().ReadAsync(buff);
+        var fileUpload = new FileUpload() { Data = buff, Size = file.Size };
+        Actions.UploadNordnetDividendsCsv(client, State.LoginState.JwtToken, Dispatch, fileUpload);
+    }
+
+    private void SaveGoalChanges()
+    {
+        //TODO: error handling..
+        Actions.UploadDividendPlan(client, State.LoginState.JwtToken, Dispatch, EditedDivPlan);
+    }
+
+    private void EditGoals()
+    {
+        if (!EditDivGoals)
+        {
+            if (State.UserDividends?.DividendPlan != null)
+                EditedDivPlan = JsonSerializer.Deserialize<DividendsPlanDto>(JsonSerializer.Serialize(State.UserDividends.DividendPlan));
+            else
+                EditedDivPlan = new DividendsPlanDto();
+        }
+
+        EditDivGoals = !EditDivGoals;
+    }
+
+    private List<DoubleDataPoint> GoalsFromPlan(DividendsPlanDto plan)
+    {
+        var oldPortfolioDivs = plan.StartDividends;
+        var newDivs = 0.0;
+        int year = plan.StartYear;
+        var divGoals = new List<DoubleDataPoint>();
+
+        while (year <= plan.StartYear + plan.Years)
+        {
+            //oldDivs = oldDivs * (1.0 + growthNow / 100.0) + (1 - 0.255) * newInvestmentYield / 100.0 * oldDivs;
+            //newPile = newPile * (1.0 + newGrowth / 100.0) + newInvestmentYield / 100.0 * newYearlyInvestments + (1 - 0.255) * newInvestmentYield / 100.0 * newPile;
+            if (year != plan.StartYear) //trick to not update on first loop to get first datapoints from start year     
+            {
+                newDivs = newDivs * (1.0 + plan.NewDivGrowth / 100.0) + plan.Yield / 100.0 * plan.YearlyInvestment + (1 - 0.255) * plan.Yield / 100.0 * (oldPortfolioDivs+newDivs); //new divs at new yield, plus all reinvested divs
+                oldPortfolioDivs = oldPortfolioDivs * (1.0 + plan.CurrentDivGrowth / 100.0); //old divs grow at their own rate
+                
+                //goalDivs = goalDivs * (1.0 + plan.CurrentDivGrowth / 100.0) + plan.Yield / 100.0 * plan.YearlyInvestment + (1 - 0.255) * plan.Yield / 100.0 * goalDivs;
+                //          growth of previous year dividends                  dividends received from new investment        dividends on re-invested previous year after-tax dividends 
+            }
+
+            var thisYearDivs = State.UserDividends.Dividends.Where(d => d.PaymentDate.Year == year);
+            var receivedDivs = 0.0;
+            foreach (var div in thisYearDivs)
+            {
+                var fxRate = div.FxRate; //backend should always fetch the rate when dividends are requested, even if the dividend doesnt have rate in it's own data
+                if (fxRate < 0.0001)
+                    fxRate = 9999999.0;
+                receivedDivs += div.TotalReceived / fxRate;
+            }
+
+            divGoals.Add(new DoubleDataPoint(receivedDivs, newDivs+oldPortfolioDivs, year.ToString()));
+            year++;
+        }
+
+        return divGoals;
+    }
+
+
+    //TODO: Ehkä mieluummin jonkinlainen onPortfolioChanged tms joka päivittää kaikki yhdessä funktiossa, kun joudutaan kuitnekin luuppaamaan samat asiat
+    private decimal CalculateTotalValueInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.00M;
+
+        var value = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00; //TODO: Actual fx-rate
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            //TODO: Jos ei löydy, jokin virheteksti tms näkyviin
+            var val = position.TotalAmount * position.Stock.CurrentPrice / fxRate;
+            value += val;
+        }
+        return decimal.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private double CalculateValueInHomeCurrency(double valueInLocalCurrency, Common.Currency localCurrency)
+    {
+        var value = 0.00;
+        var fxRate = 1.00; //TODO: Actual fx-rate
+        if (State.CurrentFxRates != null)
+            fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, localCurrency);
+        return valueInLocalCurrency / fxRate;
+    }
+
+    private decimal EstimatedNtmDividendsIncludingGrowth()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+
+            var growth = (position.Stock.DivGrowth5 + position.Stock.DivGrowth3 + position.Stock.DivGrowth1)/3.0; //Average of 1, 3 and 5 year growth rates
+
+            divs += position.TotalAmount * position.Stock.Dividend * (1.0+growth/100.0) / fxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalDividendsInHomeCurrency()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.0M;
+        var divs = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            divs += position.TotalAmount * position.Stock.Dividend / fxRate;
+        }
+        return decimal.Round((decimal)divs, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalYield()
+    {
+        if (State.PortfolioState.Portfolio == null)
+            return 0.00M;
+        var divs = 0.0;
+        var value = 0.0;
+        foreach (var position in State.PortfolioState.Portfolio.Positions)
+        {
+            var fxRate = 1.00;
+            if (State.CurrentFxRates != null)
+                fxRate = State.CurrentFxRates.GetFxRate(Common.Currency.EUR, position.Stock.Currency);
+            divs += position.TotalAmount * position.Stock.Dividend / fxRate;
+            value += position.TotalAmount * position.Stock.CurrentPrice / fxRate;
+        }
+        var yield_double = value > 0 ? 1.0 * divs / value * 100.0 : 0.0;
+        return decimal.Round((decimal)yield_double, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalDividendsGrowth()
+    {
+        var currentDivsInHomeCurrency = TotalDividendsInHomeCurrency();
+        var estimatedNtmDividendsInHomeCurrency = EstimatedNtmDividendsIncludingGrowth();
+
+        if (currentDivsInHomeCurrency > 0.001M)
+            return decimal.Round((estimatedNtmDividendsInHomeCurrency / currentDivsInHomeCurrency - 1.0M) * 100.0M, 1, MidpointRounding.AwayFromZero);
+        return 0.0M;
+    }
+
+    private decimal FormatOutput(double value, int decimals)
+    {
+        //var bigInt = (Math.Floor(value * (10 ^ decimals))); //123.45678, 3 digs -> bigInt = 123456 (type decimal)
+        //var str = bigInt.ToString().ins
+        //Console.WriteLine("FormatOutput for: " + value.ToString());
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return -999;
+        return decimal.Round((decimal)value, decimals, MidpointRounding.AwayFromZero);
+    }
+
+    private double EstimateDivGrowth(StockDTO stock)
+    {
+        return (stock.DivGrowth1 + stock.DivGrowth3 + stock.DivGrowth5) / 3;
+    }
+
+}

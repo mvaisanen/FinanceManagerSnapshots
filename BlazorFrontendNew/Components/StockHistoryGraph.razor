@@ -1,0 +1,33 @@
+﻿
+@using ClientModels;
+@using Common.Dtos;
+@inject IJSRuntime JSRuntime
+
+
+<div style="height: 220px">
+    <canvas id="@Id" style="border: 1px solid #d3d3d3;">Browser does not support HTML5 canvas</canvas>
+</div>
+
+@code {
+
+    [Parameter]
+    public List<HistoricalDividendDto> DividendData { get; set; }
+        [Parameter]
+    public List<HistoricalPriceDto>PriceData { get; set; }
+
+    [Parameter]
+    public string Id { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Console.WriteLine($"StockHistoryGraph kutsuu stockhistorygraph() id:lla {Id} ja datalla jonka pituus {DividendData.Count}");
+        JSRuntime.InvokeVoidAsync("stockhistorygraph", Id, DividendData.Where(d => d.PaymentDate.Value.Year >= 2010), PriceData);
+    }
+
+}
+

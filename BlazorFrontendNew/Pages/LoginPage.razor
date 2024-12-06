@@ -1,0 +1,65 @@
+﻿@page "/login"
+@inject HttpClient client
+@using System.Text
+@using Redux
+@using BlazorRedux
+@using Store
+@inherits ReduxComponent<AppState, IAction>
+
+<div >
+
+    
+
+    <div class="d-flex flex-column">
+        <div class="row">
+            <h1>Log in</h1>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <label>Username</label>
+                <input type="text" class="form-control" name="username" @bind="@username" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <label>Password</label>
+                <input type="password" class="form-control" name="password" @bind="@password" />
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-xs-3">
+                <button class="btn btn-primary" @onclick=@(() => Login())>Log in</button>
+            </div>
+        </div>
+    </div>
+    <!--<button class="btn btn-primary" onclick="@(async () => await Login())">Log in</button>-->
+   
+
+    <p>Login state: @State.LoginState.LoginMsg</p>
+    <p>Jwt state: @State.LoginState.JwtToken</p>
+
+</div>
+
+@code {
+    private string username;
+    private string password;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine("LoginPage OnInitAsync()");
+        await base.OnInitializedAsync();
+        client.Timeout = new TimeSpan(0, 0, 15);
+        await Logout();
+    }
+
+    private void Login()
+    {
+        Actions.Login(client, username, password, Dispatch);
+    }
+
+    private Task Logout()
+    {
+        Actions.Logout(client, State.LoginState.JwtToken, Dispatch);
+        return Task.FromResult(true);
+    }
+}

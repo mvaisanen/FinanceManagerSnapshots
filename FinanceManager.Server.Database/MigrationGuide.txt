@@ -1,0 +1,1 @@
+dotnet ef migrations add ChangeStockToDDDStyle --context FinanceManagerContext --project FinanceManager.Server.Database --startup-project Server --verbose

@@ -1,0 +1,167 @@
+﻿@page "/stockdetails"
+@inject HttpClient client
+@using System.Text
+@using System.Net.Http.Headers;
+@using System.Text.Json;
+@using Redux
+@using BlazorRedux
+@using Store
+@using Common.Dtos;
+@using Common.HelperModels;
+@using Common.Util;
+@using Common;
+@using ClientModels;
+@using BlazorFrontendNew.Client.Util;
+@inherits AppComponent
+
+<div>
+
+    <h2>Stock Details</h2>
+
+    <!--@foreach(var hist in Results)
+    {
+        <p>@hist.PaymentdDate: @hist.AmountPerShare</p>
+    }-->
+    <StockHistoryGraph DividendData=Results PriceData=PriceHistory Id="stockhist" />
+
+    
+</div>
+
+@code {
+    [Parameter]
+    public string StockId { get; set; }
+    private List<HistoricalDividendDto> Results = new List<HistoricalDividendDto>();
+    private List<HistoricalPriceDto> PriceHistory = new List<HistoricalPriceDto>();
+
+
+#if DEBUG
+    private const string baseUrl = "http://localhost:6001";
+#else
+    private const string  baseUrl = "http://104.244.79.30:6001";
+#endif
+
+    protected override async void OnInitialized()
+    {
+        base.OnInitialized();
+        GetDividendHistory(client, State.LoginState.JwtToken);
+        PriceHistory = (await GetHistory<HistoricalPriceDto>(client, State.LoginState.JwtToken, "/stock/pricehistory/116")).OrderBy(h => h.Date).ToList();
+        StateHasChanged();
+    }
+
+    private async void GetDividendHistory(HttpClient client, string jwt)
+    {
+
+        Console.WriteLine("GetDividendHistory(): Token is " + jwt);
+        if (string.IsNullOrEmpty(jwt))
+        {
+            Console.WriteLine("Jwt is null or empty, cannot get screener results...");
+            return;
+        }
+
+        var request = new HttpRequestMessage
+        {
+            RequestUri = new Uri($"{baseUrl}/api" + "/stock/dividendhistory/116"),
+            Method = HttpMethod.Get,
+        };
+
+        var token = ExtendedJsonSerializer.Deserialize<JwtToken>(jwt);
+        request.Headers.Add("Authorization", "Bearer " + token.accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        try
+        {
+            var response = await client.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("Fetched dividend history results as string: " + jsonString);
+                try
+                {
+                    Console.WriteLine("Deserializing json...");
+                    Results = ExtendedJsonSerializer.Deserialize<List<HistoricalDividendDto>>(jsonString).OrderBy(h => h.PaymentDate).ToList();
+                    Console.WriteLine("Results saved");
+                    //StateHasChanged();
+                }
+                catch (JsonException jse)
+                {
+                    //todo: show error
+                }
+            }
+            else
+            {
+                //todo: show error
+            }
+        }
+        catch (Exception e)
+        {
+            //todo: show error
+        }  
+    }
+
+    private async Task<List<T>> GetHistory<T>(HttpClient client, string jwt, string urlEnd) where T:class
+    {
+
+        Console.WriteLine("GetHistory(): Token is " + jwt);
+        if (string.IsNullOrEmpty(jwt))
+        {
+            Console.WriteLine("Jwt is null or empty, cannot get screener results...");
+            return new List<T>();
+        }
+
+        var request = new HttpRequestMessage
+        {
+            RequestUri = new Uri($"{baseUrl}/api" + urlEnd),
+            Method = HttpMethod.Get,
+        };
+
+        var token = ExtendedJsonSerializer.Deserialize<JwtToken>(jwt);
+        request.Headers.Add("Authorization", "Bearer " + token.accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        try
+        {
+            var response = await client.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonString = await response.Content.ReadAsStringAsync();
+                Console.WriteLine("Fetched history results as string: " + jsonString);
+                try
+                {
+                    Console.WriteLine("Deserializing json...");
+                    return ExtendedJsonSerializer.Deserialize<List<T>>(jsonString); //.OrderBy(h => h.PaymentDate).ToList();              
+                }
+                catch (JsonException jse)
+                {
+                    return new List<T>();
+                    //todo: show error
+                }
+            }
+            else
+            {
+                return new List<T>();
+                //todo: show error
+            }
+        }
+        catch (Exception e)
+        {
+            return new List<T>();
+            //todo: show error
+        }  
+    }
+
+
+
+
+    //TODO: This is same as in portfoliopage, refactor into general util class / extension method or sometin
+    //Temp solution until MS implements output formatting, only works for showing values, editing would be problematic.
+    private decimal FormatOutput(double value, int decimals)
+    {
+        //var bigInt = (Math.Floor(value * (10 ^ decimals))); //123.45678, 3 digs -> bigInt = 123456 (type decimal)
+        //var str = bigInt.ToString().ins
+        //Console.WriteLine("FormatOutput for: " + value.ToString());
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return -999;
+        return decimal.Round((decimal)value, decimals, MidpointRounding.AwayFromZero);
+    }
+
+}

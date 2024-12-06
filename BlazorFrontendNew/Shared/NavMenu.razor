@@ -1,0 +1,130 @@
+﻿<!--<div class="top-row pl-4 navbar navbar-dark">
+    <a class="navbar-brand" href="">BlazorFrontendNew</a>
+    <button class="navbar-toggler" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <ul class="nav flex-column">
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="counter">
+                <span class="oi oi-plus" aria-hidden="true"></span> Counter
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="fetchdata">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Fetch data
+            </NavLink>
+        </li>
+    </ul>
+</div>-->
+
+
+@using Redux
+@using BlazorRedux
+@using Store
+@inherits ReduxComponent<AppState, IAction>
+
+<div class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark fixed-top">
+
+    <NavLink class="navbar-brand" href="">Home</NavLink>
+    <button class="navbar-toggler" @onclick="ToggleNavMenu" type="button" data-toggle="collapse" data-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+            aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="@NavMenuCssClass navbar-collapse" @onclick="CollapseNavMenu">
+        <div class="navbar-nav d-sm-inline-flex">
+            <NavLink class="nav-item nav-link" href="portfolio">Portfolio</NavLink>
+            <NavLink class="nav-item nav-link" href="watchlist">Watchlist</NavLink>
+            <NavLink class="nav-item nav-link" href="screener">Screener</NavLink>
+            <NavLink class="nav-item nav-link" href="dividends">Dividends</NavLink>
+            <NavLink class="nav-item nav-link" href="stockdetails">StockDetails</NavLink> <!-- TODO: Remove this once page is ready, it should be opened via clicking stock on screener, portfolio etc -->
+            <a class="nav-item nav-link">Budgets</a>
+            <a class="nav-item nav-link">Admin</a>
+            <a class="nav-item nav-link">About</a>
+            <a class="nav-item nav-link">Contact</a>           
+        </div>
+        <div class="nav-item-right">
+            <NavLink href="login"><span class="glyphicon glyphicon-log-in"></span>@(string.IsNullOrEmpty(State.LoginState.JwtToken) ? "Login" : "Logout")</NavLink>
+        </div>
+    </div>
+
+</div>
+
+    <!--
+    <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-dark bg-dark border-bottom box-shadow mb-3 fixed-top">
+        <div class="container">
+            <NavLink class="navbar-brand text-light" href="" Match="NavLinkMatch.All">Home</NavLink>
+            <button class="navbar-toggler" @onclick="ToggleNavMenu" type="button" data-toggle="collapse" data-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                    aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="@NavMenuCssClass navbar-collapse d-sm-inline-flex flex-sm-row-reverse" @onclick="CollapseNavMenu">
+                <ul class="navbar-nav flex-grow-1">
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="portfolio">Portfolio</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="watchlist">Watchlist</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="screener">Screener</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="budgets">Budgets</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="dividends">Dividends</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-light" href="about">About</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="nav navbar-nav navbar-right">
+                <NavLink href="login"><span class="glyphicon glyphicon-log-in"></span>@(string.IsNullOrEmpty(State.LoginState.JwtToken) ? "Login" : "Logout")</NavLink>
+            </div>
+        </div>
+    </nav>
+        -->
+
+
+    @code {
+        /*
+        bool collapseNavMenu = true;
+
+        string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+        void ToggleNavMenu()
+        {
+            collapseNavMenu = !collapseNavMenu;
+        }*/
+
+        bool collapseNavMenu = true;
+
+        string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+        void ToggleNavMenu()
+        {
+            collapseNavMenu = !collapseNavMenu;
+        }
+
+        void CollapseNavMenu()
+        {
+            collapseNavMenu = true;
+        }
+
+        string NavTest()
+        {
+            //Console.WriteLine("NavTest: State.LoginState");
+            //Console.WriteLine("NavTest: State.LoginState="+State.LoginState.ToString());
+            //Console.WriteLine(State.LoginState.JwtToken);
+            return "NavTest!";
+        }
+    }

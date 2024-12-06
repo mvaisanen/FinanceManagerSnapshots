@@ -1,0 +1,176 @@
+﻿@using Common.Dtos;
+@using System.Text.Json;
+
+
+@if (DetailMode)
+{
+    <tr>
+        <td><span @onclick="@PositionDetailClicked">-</span>@pos.Stock.Name</td>
+        <td>@pos.Stock.Ticker</td>
+        <td>@pos.Buys.Sum(buy => buy.Amount)</td>
+        <td>@FormatOutput(ValueInEuros(pos.Buys, pos.Stock.CurrentPrice), 2)</td> <!-- TODO: Actual fx rate instead of 1.00!! -->
+        <td>@FormatOutput(CostBasis(pos.Buys), 2)</td>
+        <td>@pos.Stock.CurrentPrice</td>
+        <td>@FormatOutput(pos.Stock.CurrentPrice / CostBasis(pos.Buys) * 100 - 100, 2)</td>
+        <td>@FormatOutput(pos.Stock.CurrentPrice / pos.Stock.EpsTtm, 2)</td>
+        <td>@FormatOutput(pos.Stock.Dividend / pos.Stock.CurrentPrice * 100, 2)</td>
+        <td>Edit?</td>
+        <!--<td style="font-family:'Arial'; font-size:75%" @onclick="@(() => OnEditClick.InvokeAsync(wls.Id))">Edit</td>-->
+    </tr>
+    <tr>
+        <td colspan="11">
+            <!--<EditForm Model="@EditedData"  name="EditBuyForm" OnValidSubmit="SaveBuyChanges">-->
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Amount</th>
+                        <th scope="col">Price</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var buy in pos.Buys)
+                    {
+                        <StockPurchase BuyIdToEdit="@BuyIdToEdit" Buy="buy" OnEditClick="@OnEditClick" OnSaveClick="@OnSaveClick"/>
+                        /*
+                        if (buy.Id != BuyIdToEdit)
+                        {
+                            <tr @onclick="(() => DetailRowClicked(buy.Id))">
+                                <td>@buy.PurchaseDate.ToShortDateString()</td>
+                                <td>@buy.Amount</td>
+                                <td>@buy.Price</td>
+                                <td />
+                            </tr>
+                        }
+                        else
+                        {
+                            <tr @onclick="(() => DetailRowClicked(buy.Id))">
+                                <td><InputDateAdv @bind-Value="@EditedData.PurchaseDate"/></td>
+                                <td><InputNumber @bind-Value="@EditedData.Amount"></InputNumber></td>
+                                <td><InputNumber @bind-Value="@EditedData.Price" /></td>
+                                <td>Save</td>
+                            </tr>
+                        }*/
+                    }
+                </tbody>
+            </table>
+            <!--</EditForm>-->
+        </td>
+    </tr>
+}
+else
+{
+    <tr>
+        <!-- TTODO: Table inside first cell of this row, to show buys below company name??-->
+        <td><span @onclick="@PositionDetailClicked">+</span>@pos.Stock.Name</td>
+        <td>@pos.Stock.Ticker</td>
+        <td>@pos.Buys.Sum(buy => buy.Amount)</td>
+        <td>@FormatOutput(ValueInEuros(pos.Buys, pos.Stock.CurrentPrice), 2)</td> <!-- TODO: Actual fx rate instead of 1.00!! -->
+        <td>@FormatOutput(CostBasis(pos.Buys), 2)</td>
+        <td>@pos.Stock.CurrentPrice</td>
+        <td>@FormatOutput(pos.Stock.CurrentPrice / CostBasis(pos.Buys) * 100 - 100, 2)</td>
+        <td>@FormatOutput(pos.Stock.CurrentPrice / pos.Stock.EpsTtm, 2)</td>
+        <!--<td>@FormatOutput(pos.Stock.Dividend, 2)</td>-->       
+        <td>@FormatOutput(pos.Stock.Dividend / pos.Stock.CurrentPrice * 100, 2)</td>
+        <td><span @onclick="@(() => OnDeletePositionClick.InvokeAsync(pos.Id))">X</span></td>
+    </tr>
+}
+
+@code {
+    [Parameter]
+    public PortfolioPositionDto pos { get; set; }
+
+    [Parameter]
+    public CurrencyRatesDto CurrencyRates { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnEditClick { get; set; }
+
+    [Parameter]
+    public EventCallback<StockPurchaseDto> OnSaveClick { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnDeletePositionClick { get; set; }
+
+    [Parameter]
+    public int BuyIdToEdit { get; set; } = -1;
+
+    private bool DetailMode { get; set; }
+
+
+    /*[Parameter]
+    public EventCallback<int> OnEditClick { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnRemoveClick { get; set; }
+
+    [Parameter]
+    public EventCallback<WatchlistStockDTO> OnSaveClick { get; set; }*/
+
+    //private string TargetPriceStr { get; set; }
+    //private bool priceError { get; set; }
+    //private WatchlistStockDTO EditedStock { get; set; }
+    protected override void OnInitialized()
+    {
+        //Console.WriteLine($"PortfolioPosition {pos.Id} OnInitialized");
+        base.OnInitialized();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        //Console.WriteLine($"PortfolioPosition {pos.Id} OnAfterRender, firstRender={firstRender}");
+        base.OnAfterRender(firstRender);
+    }
+
+    protected override void OnParametersSet()
+    {
+        //Console.WriteLine($"PortfolioPosition {pos.Id} OnParametersSet(). BuyIdToEdit={BuyIdToEdit}");
+        base.OnParametersSet();
+    }
+
+    void PositionDetailClicked()
+    {
+        DetailMode = !DetailMode;
+    }
+
+    /*private void DetailRowClicked(int buyId)
+        {
+        if (buyId != BuyIdToEdit)
+            OnEditClick.InvokeAsync(buyId);
+    }*/
+
+    private void SaveBuyChanges()
+    {
+        Console.WriteLine("Trying to handle SaveBuyChanges...");
+    }
+
+    //Temp solution until MS implements output formatting, only works for showing values, editing would be problematic.
+    private decimal FormatOutput(double value, int decimals)
+    {
+        //var bigInt = (Math.Floor(value * (10 ^ decimals))); //123.45678, 3 digs -> bigInt = 123456 (type decimal)
+        //var str = bigInt.ToString().ins
+        //Console.WriteLine("FormatOutput for: " + value.ToString());
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return -999;
+        return decimal.Round((decimal)value, decimals, MidpointRounding.AwayFromZero);
+    }
+
+    private double ValueInEuros(List<StockPurchaseDto> buys, double currentPriceInStockCurrency)
+    {
+        var fxRate = 1.00;
+        if (CurrencyRates != null)
+            fxRate = CurrencyRates.GetFxRate(Common.Currency.EUR, pos.Stock.Currency);
+        var valueInStockCurrency = buys.Sum(buy => buy.Amount * currentPriceInStockCurrency);
+        return valueInStockCurrency / fxRate;
+    }
+
+    private double CostBasis(List<StockPurchaseDto> buys)
+    {
+        var totalSumUsed = buys.Sum(buy => buy.Amount * buy.Price);
+        return totalSumUsed / buys.Sum(buy => buy.Amount);
+    }
+
+
+}
+

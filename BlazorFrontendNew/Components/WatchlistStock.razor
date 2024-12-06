@@ -1,0 +1,104 @@
+﻿@using Common.Dtos;
+@using System.Text.Json;
+
+
+<!-- Normal rending when not in edit mode. TODO: Add editing mode rendering... -->
+@if (!EditMode)
+{
+    <tr>
+        <td>@wls.CompanyName</td>
+        <td>@wls.StockTicker</td>
+        <td>@FormatOutput(wls.CurrentPrice / @wls.EpsTtm, 2)</td>
+        <td>@FormatOutput(wls.Dividend / @wls.CurrentPrice * 100, 2)</td>
+        <td>@wls.CurrentPrice</td>
+        <td>@wls.TargetPrice</td>
+        <td><input type="checkbox" disabled @bind="@wls.Notify" /></td>
+        <td style="font-family:'Arial'; font-size:75%" @onclick="@(() => OnEditClick.InvokeAsync(wls.Id))">Edit</td>
+    </tr>
+}
+else
+{
+    <tr>
+        <td>@wls.CompanyName</td>
+        <td>@wls.StockTicker</td>
+        <td>@FormatOutput(wls.CurrentPrice / @wls.EpsTtm, 2)</td>
+        <td>@FormatOutput(wls.Dividend / @wls.CurrentPrice * 100, 2)</td>
+        <td>@wls.CurrentPrice</td>
+        <td><input type="text" @oninput="@OntargetPriceChange" @bind="@TargetPriceStr" class=@(priceError ? "invalid" : "") /></td>
+        <!--<td><input type="text" @oninput="@OntargetPriceChange" placeholder="@TargetPriceStr"  class=@(priceError ? "invalid" : "")/></td>-->
+        <td><input type="checkbox" @bind="@EditedStock.Notify" /></td>
+        <td>
+            <div>
+                <button style="font-size: 70%" @onclick="@Save" disabled="@priceError">Save</button>
+                <button style="font-size: 70%" @onclick="@CancelEdit">Cancel</button>
+                <button style="font-size: 70%" @onclick="@(() => OnRemoveClick.InvokeAsync(wls.Id))">Remove</button>
+            </div>
+        </td>
+    </tr>
+}
+
+@code {
+    [Parameter]
+    public WatchlistStockDTO wls { get; set; }
+
+    [Parameter]
+    public bool EditMode { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnEditClick { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnRemoveClick { get; set; }
+
+    [Parameter]
+    public EventCallback<WatchlistStockDTO> OnSaveClick { get; set; }
+
+    private string TargetPriceStr { get; set; }
+    private bool priceError { get; set; }
+    private WatchlistStockDTO EditedStock { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        this.TargetPriceStr = wls.TargetPrice != null ? wls.TargetPrice.ToString() : "";
+
+        //Create clone with this trick
+        var wlsJosn = JsonSerializer.Serialize(wls);
+        EditedStock = JsonSerializer.Deserialize<WatchlistStockDTO>(wlsJosn);
+    }
+
+    private void OntargetPriceChange(ChangeEventArgs e)
+    {
+        //Console.WriteLine("OntargetPriceChange");
+        if (double.TryParse(e.Value.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double res))
+        {
+            priceError = false;
+            EditedStock.TargetPrice = res;
+        }
+        else
+        {
+            priceError = true;
+        }
+        TargetPriceStr = res.ToString();
+    }
+
+    private void CancelEdit(MouseEventArgs e)
+    {
+        OnEditClick.InvokeAsync(-1);
+        priceError = false;
+    }
+
+    private void Save(MouseEventArgs e)
+    {
+        OnSaveClick.InvokeAsync(EditedStock);
+    }
+
+    //Temp solution until MS implements output formatting, only works for showing values, editing would be problematic.
+    private decimal FormatOutput(double value, int decimals)
+    {
+        //var bigInt = (Math.Floor(value * (10 ^ decimals))); //123.45678, 3 digs -> bigInt = 123456 (type decimal)
+        //var str = bigInt.ToString().ins
+        return decimal.Round((decimal)value, 2, MidpointRounding.AwayFromZero);
+    }
+}
+
